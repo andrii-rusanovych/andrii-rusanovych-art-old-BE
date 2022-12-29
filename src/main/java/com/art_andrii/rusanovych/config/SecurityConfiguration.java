@@ -6,13 +6,15 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -27,17 +29,28 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @Configuration
 class SecurityConfiguration {
 
-    private final RsaKeyProperties rsaKeys;
+    @Value("${ART_WEBSITE_RUSANOVYCH_ADMIN_NAME}")
+    private String adminUserName;
 
-    SecurityConfiguration(RsaKeyProperties rsaKeyProperties) {
+    @Value("${ART_WEBSITE_RUSANOVYCH_ADMIN_PASSWORD}")
+    private String adminPassword;
+
+    private final RsaKeyProperties rsaKeys;
+    private PasswordEncoder passwordEncoder;
+
+    SecurityConfiguration(RsaKeyProperties rsaKeyProperties, PasswordEncoder passwordEncoder) {
         this.rsaKeys = rsaKeyProperties;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .authorizeRequests(auth -> auth
-                        .anyRequest().authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/token").permitAll()
+                        .requestMatchers(HttpMethod.GET,"/api/paintings").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/paintings/*").permitAll()
+                        .anyRequest().hasAuthority("SCOPE_ROLE_Admin")
                 )
                 .oauth2ResourceServer(OAuth2ResourceServerConfigurer::jwt)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -49,10 +62,11 @@ class SecurityConfiguration {
     @Bean
     public InMemoryUserDetailsManager users() {
         return new InMemoryUserDetailsManager(
-                User.withUsername("admin")
-                        .password("{noop}secret")
-                        .authorities("read")
+                User.withUsername(adminUserName)
+                        .password(passwordEncoder.encode(adminPassword))
+                        .roles("Admin")
                         .build()
+
         );
     }
 
